@@ -25,6 +25,7 @@ const dbURL = "postgres://user:password@localhost:5432/mydb"
 const (
 	listAllOrders = "1. List all orders"
 	addNewOrder   = "2. Add new order"
+	exitProgram   = "9. Exit program"
 
 	printLimit    = "How many items to print? (0 will print all items)"
 	invalidChoice = "Invalid choice"
@@ -38,13 +39,19 @@ func main() {
 
 	fmt.Println("✅ Додаток підключено до БД")
 
-	menu(os.Stdout, os.Stdin, controller)
+	err := menu(os.Stdout, os.Stdin, controller)
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(0)
+	}
 }
 
-func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
+func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
 	for true {
 		fmt.Fprintf(writer, listAllOrders+"\n")
 		fmt.Fprintf(writer, addNewOrder+"\n")
+		fmt.Fprintf(writer, exitProgram+"\n")
 
 		var userChoice string
 		fmt.Fscan(reader, &userChoice)
@@ -62,12 +69,14 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 			if !isOk {
 				fmt.Fprintf(writer, "Some error happened while forming order\n")
 			}
-
+		case "9":
+			return fmt.Errorf("Exit program")
 		default:
 			fmt.Fprintf(writer, invalidChoice+"\n\n")
 		}
 
 	}
+	return nil
 }
 
 func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
