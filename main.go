@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -33,6 +34,7 @@ const (
 
 func main() {
 	controller := postgres.NewDbController(dbURL)
+	defer controller.Close()
 
 	fmt.Println("✅ Додаток підключено до БД")
 
@@ -56,7 +58,10 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 			printDb(writer, controller, limit)
 
 		case "2":
-			formNewOrder(writer, reader, controller)
+			isOk := formNewOrder(writer, reader, controller)
+			if !isOk {
+				fmt.Fprintf(writer, "Some error happened while forming order\n")
+			}
 
 		default:
 			fmt.Fprintf(writer, invalidChoice+"\n\n")
@@ -94,40 +99,50 @@ func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
 }
 
 func formNewOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) bool {
-	var orderTimeStamp time.Time
+	var orderTimeStampInput string
 	var orderType string
 	var amount float64
 	var currency string
 	var exchangeRate float64
+	var orderTimeStamp time.Time
 
+	scanner := bufio.NewScanner(reader)
 	fmt.Fprintf(writer, "Write the date and time of order in following format: (%s)\n", timeFormat)
 	fmt.Fprintf(writer, "Order date: ")
-	_, err := fmt.Fscan(reader, &orderTimeStamp)
+	if scanner.Scan() {
+		orderTimeStampInput = scanner.Text()
+	}
+	var err = scanner.Err()
+	if err != nil {
+		return false
+	}
+
+	orderTimeStamp, err = time.Parse(timeFormat, orderTimeStampInput)
 	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Order type: ")
-	_, err1 := fmt.Fscan(reader, &orderType)
-	if err1 != nil {
+	_, err = fmt.Fscan(reader, &orderType)
+	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Pay amount: ")
-	_, err2 := fmt.Fscan(reader, &amount)
-	if err2 != nil {
+	_, err = fmt.Fscan(reader, &amount)
+	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Currency: ")
-	_, err3 := fmt.Fscan(reader, &currency)
-	if err3 != nil {
+	_, err = fmt.Fscan(reader, &currency)
+	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Exchange rate: ")
-	_, err4 := fmt.Fscan(reader, &exchangeRate)
-	if err4 != nil {
+	_, err = fmt.Fscan(reader, &exchangeRate)
+	if err != nil {
 		return false
 	}
 

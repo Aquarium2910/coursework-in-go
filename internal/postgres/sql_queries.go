@@ -22,7 +22,7 @@ const (
 		 LIMIT $1`
 
 	addNewOrder = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
-		 VALUES ($1::date, $1::time, $2, $3, $4, $5)`
+		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
 )
 
 func NewDbController(dbURL string) *DbController {
@@ -32,9 +32,12 @@ func NewDbController(dbURL string) *DbController {
 		fmt.Fprintf(os.Stderr, "Unable to create connection pool: %v\n", err)
 		os.Exit(1)
 	}
-	defer dbPool.Close()
 
 	return &DbController{ctx: ctx, dbPool: dbPool}
+}
+
+func (c *DbController) Close() {
+	c.dbPool.Close()
 }
 
 func (c *DbController) SelectAllOrders(limit int) (pgx.Rows, error) {
