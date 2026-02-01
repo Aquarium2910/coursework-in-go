@@ -25,6 +25,10 @@ const (
 		GROUP BY orderdate
 		ORDER BY total_uah DESC 
 		LIMIT $1`
+	selectTypeOfSmallestOrders = `SELECT DISTINCT ordertype FROM
+                              (SELECT ordertype, amount FROM orders
+                              ORDER BY amount ASC
+                              LIMIT $1)`
 
 	addNewOrder = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
 		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
@@ -107,4 +111,13 @@ func (c *DbController) DatesWithBiggestOrders(limit int) (pgx.Rows, error) {
 	}
 
 	return c.dbPool.Query(c.ctx, selectDatesWithBiggestOrders, limit)
+}
+
+func (c *DbController) TypeOfSmallestOrders(limit int) (pgx.Rows, error) {
+	rows, err := c.dbPool.Query(c.ctx, selectTypeOfSmallestOrders, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return rows, nil
 }

@@ -12,15 +12,19 @@ import (
 
 const dbURL = "postgres://user:password@localhost:5432/mydb"
 
-const biggestOrdersLimit = 5
+const (
+	biggestOrdersLimit         = 5
+	typesOfSmallestOrdersLimit = 6
+)
 
 const (
-	listAllOrders      = "1. List all orders"
-	addNewOrder        = "2. Add new order"
-	updateOrder        = "3. Update order type"
-	deleteOrderString  = "4. Delete order"
-	biggestOrdersDates = "5. Show 5 dates with biggest orders"
-	exitProgram        = "9. Exit program"
+	listAllOrders         = "1. List all orders"
+	addNewOrder           = "2. Add new order"
+	updateOrder           = "3. Update order type"
+	deleteOrderString     = "4. Delete order"
+	biggestOrdersDates    = "5. Show 5 dates with biggest orders"
+	typesOfSmallestOrders = "8. Show types of 6 smallest orders"
+	exitProgram           = "9. Exit program"
 
 	printLimit    = "How many items to print? (0 will print all items)"
 	invalidChoice = "Invalid choice"
@@ -49,6 +53,7 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		fmt.Fprintf(writer, updateOrder+"\n")
 		fmt.Fprintf(writer, deleteOrderString+"\n")
 		fmt.Fprintf(writer, biggestOrdersDates+"\n")
+		fmt.Fprintf(writer, typesOfSmallestOrders+"\n")
 		fmt.Fprintf(writer, exitProgram+"\n")
 
 		var userChoice string
@@ -73,6 +78,8 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 			deleteOrder(writer, reader, controller)
 		case "5":
 			ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
+		case "8":
+			ShowTypesOfSmallestOrders(writer, controller, typesOfSmallestOrdersLimit)
 		case "9":
 			return fmt.Errorf("Exit program")
 		default:
@@ -167,6 +174,8 @@ func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbControl
 		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
 	}
 
+	defer rows.Close()
+
 	var order models.Order
 
 	fmt.Fprintf(writer, "Order dates		Total in UAH\n")
@@ -224,4 +233,26 @@ func deleteOrder(writer io.Writer, reader io.Reader, controller *postgres.DbCont
 	}
 
 	fmt.Fprintf(writer, "Order deleted successfully\n\n")
+}
+
+func ShowTypesOfSmallestOrders(writer io.Writer, controller *postgres.DbController, limit int) {
+	var orderType string
+	rows, err := controller.TypeOfSmallestOrders(limit)
+
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't show types of smallest orders: %v\n", err)
+		return
+	}
+
+	defer rows.Close()
+
+	fmt.Fprintf(writer, "\n")
+	for rows.Next() {
+		err = rows.Scan(&orderType)
+		if err != nil {
+			fmt.Fprintf(writer, "Couldn't show types of smallest orders: %v\n", err)
+		}
+
+		fmt.Fprintf(writer, "%s\n", orderType)
+	}
 }
