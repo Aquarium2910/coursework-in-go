@@ -20,6 +20,11 @@ const (
 	selectAllOrdersWithLimit = `SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
 		 FROM orders
 		 LIMIT $1`
+	selectDatesWithBiggestOrders = `
+		SELECT orderdate, SUM(amount*exchangerate) as total_uah FROM orders
+		GROUP BY orderdate
+		ORDER BY total_uah DESC 
+		LIMIT $1`
 
 	addNewOrder = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
 		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
@@ -62,4 +67,12 @@ func (c *DbController) AddNewOrder(orderDate time.Time, orderType string, amount
 	}
 
 	return true
+}
+
+func (c *DbController) DatesWithBiggestOrders(limit int) (pgx.Rows, error) {
+	if limit == 0 {
+		return nil, nil
+	}
+
+	return c.dbPool.Query(c.ctx, selectDatesWithBiggestOrders, limit)
 }

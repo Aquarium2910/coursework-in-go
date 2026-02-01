@@ -2,30 +2,23 @@ package main
 
 import (
 	"bufio"
+	"coursework/internal/models"
+	"coursework/internal/postgres"
 	"fmt"
 	"io"
 	"os"
 	"time"
-
-	"coursework/internal/postgres"
 )
-
-type Order struct {
-	id           int
-	orderDate    string
-	orderTime    string
-	orderType    string
-	amount       float64
-	currency     string
-	exchangeRate float64
-}
 
 const dbURL = "postgres://user:password@localhost:5432/mydb"
 
+const biggestOrdersLimit = 5
+
 const (
-	listAllOrders = "1. List all orders"
-	addNewOrder   = "2. Add new order"
-	exitProgram   = "9. Exit program"
+	listAllOrders      = "1. List all orders"
+	addNewOrder        = "2. Add new order"
+	biggestOrdersDates = "3. Show 5 dates with biggest orders"
+	exitProgram        = "9. Exit program"
 
 	printLimit    = "How many items to print? (0 will print all items)"
 	invalidChoice = "Invalid choice"
@@ -48,9 +41,10 @@ func main() {
 }
 
 func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
-	for true {
+	for {
 		fmt.Fprintf(writer, listAllOrders+"\n")
 		fmt.Fprintf(writer, addNewOrder+"\n")
+		fmt.Fprintf(writer, biggestOrdersDates+"\n")
 		fmt.Fprintf(writer, exitProgram+"\n")
 
 		var userChoice string
@@ -69,6 +63,8 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 			if !isOk {
 				fmt.Fprintf(writer, "Some error happened while forming order\n")
 			}
+		case "3":
+			ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
 		case "9":
 			return fmt.Errorf("Exit program")
 		default:
@@ -76,7 +72,6 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		}
 
 	}
-	return nil
 }
 
 func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
@@ -90,16 +85,12 @@ func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
 	fmt.Fprintf(writer, "Id	Date and time of order	Order type	"+
 		"Pay amount		Currency 	Exchange rate	\n")
 	for orders.Next() {
-		var id int
-		var orderTimeStamp time.Time
-		var orderType string
-		var amount float64
-		var currency string
-		var exchangeRate float64
+		var order models.Order
 
-		err = orders.Scan(&id, &orderTimeStamp, &orderType, &amount, &currency, &exchangeRate)
+		err = orders.Scan(&order.Id, &order.OrderTimeStamp, &order.OrderType, &order.Amount, &order.Currency, &order.ExchangeRate)
 
-		fmt.Fprintf(writer, "%d %s %s %f %s %f\n", id, orderTimeStamp, orderType, amount, currency, exchangeRate)
+		fmt.Fprintf(writer, "%d %s %s %f %s %f\n", order.Id, order.OrderTimeStamp, order.OrderType, order.Amount,
+			order.Currency, order.ExchangeRate)
 	}
 
 	if err := orders.Err(); err != nil {
@@ -108,54 +99,49 @@ func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
 }
 
 func formNewOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) bool {
-	var orderTimeStampInput string
-	var orderType string
-	var amount float64
-	var currency string
-	var exchangeRate float64
-	var orderTimeStamp time.Time
+	var order models.Order
 
 	scanner := bufio.NewScanner(reader)
 	fmt.Fprintf(writer, "Write the date and time of order in following format: (%s)\n", timeFormat)
 	fmt.Fprintf(writer, "Order date: ")
 	if scanner.Scan() {
-		orderTimeStampInput = scanner.Text()
+		order.OrderTimeStampInput = scanner.Text()
 	}
 	var err = scanner.Err()
 	if err != nil {
 		return false
 	}
 
-	orderTimeStamp, err = time.Parse(timeFormat, orderTimeStampInput)
+	order.OrderTimeStamp, err = time.Parse(timeFormat, order.OrderTimeStampInput)
 	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Order type: ")
-	_, err = fmt.Fscan(reader, &orderType)
+	_, err = fmt.Fscan(reader, &order.OrderType)
 	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Pay amount: ")
-	_, err = fmt.Fscan(reader, &amount)
+	_, err = fmt.Fscan(reader, &order.Amount)
 	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Currency: ")
-	_, err = fmt.Fscan(reader, &currency)
+	_, err = fmt.Fscan(reader, &order.Currency)
 	if err != nil {
 		return false
 	}
 
 	fmt.Fprintf(writer, "Exchange rate: ")
-	_, err = fmt.Fscan(reader, &exchangeRate)
+	_, err = fmt.Fscan(reader, &order.ExchangeRate)
 	if err != nil {
 		return false
 	}
 
-	isAdded := controller.AddNewOrder(orderTimeStamp, orderType, amount, currency, exchangeRate)
+	isAdded := controller.AddNewOrder(order.OrderTimeStamp, order.OrderType, order.Amount, order.Currency, order.ExchangeRate)
 
 	if isAdded {
 		fmt.Fprintf(writer, "✅Added new order succesfully\n")
@@ -164,4 +150,24 @@ func formNewOrder(writer io.Writer, reader io.Reader, controller *postgres.DbCon
 
 	fmt.Fprintf(writer, "❌Failed to add new order\n")
 	return false
+}
+
+func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbController, limit int) {
+	rows, err := controller.DatesWithBiggestOrders(limit)
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
+	}
+
+	var order models.Order
+
+	fmt.Fprintf(writer, "Order dates		Total in UAH\n")
+	for rows.Next() {
+		err = rows.Scan(&order.OrderTimeStamp, &order.TotalUah)
+		fmt.Fprintf(writer, "%s\t\t%f\n", order.OrderTimeStamp.Format(time.DateOnly), order.TotalUah)
+	}
+	fmt.Fprintf(writer, "\n")
+
+	if err := rows.Err(); err != nil {
+		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
+	}
 }
