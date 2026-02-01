@@ -17,7 +17,9 @@ const biggestOrdersLimit = 5
 const (
 	listAllOrders      = "1. List all orders"
 	addNewOrder        = "2. Add new order"
-	biggestOrdersDates = "3. Show 5 dates with biggest orders"
+	updateOrder        = "3. Update order type"
+	deleteOrderString  = "4. Delete order"
+	biggestOrdersDates = "5. Show 5 dates with biggest orders"
 	exitProgram        = "9. Exit program"
 
 	printLimit    = "How many items to print? (0 will print all items)"
@@ -42,8 +44,10 @@ func main() {
 
 func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
 	for {
-		fmt.Fprintf(writer, listAllOrders+"\n")
+		fmt.Fprintf(writer, "\n"+listAllOrders+"\n")
 		fmt.Fprintf(writer, addNewOrder+"\n")
+		fmt.Fprintf(writer, updateOrder+"\n")
+		fmt.Fprintf(writer, deleteOrderString+"\n")
 		fmt.Fprintf(writer, biggestOrdersDates+"\n")
 		fmt.Fprintf(writer, exitProgram+"\n")
 
@@ -64,6 +68,10 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 				fmt.Fprintf(writer, "Some error happened while forming order\n")
 			}
 		case "3":
+			updateOrderType(writer, reader, controller)
+		case "4":
+			deleteOrder(writer, reader, controller)
+		case "5":
 			ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
 		case "9":
 			return fmt.Errorf("Exit program")
@@ -82,7 +90,7 @@ func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
 	}
 	defer orders.Close()
 
-	fmt.Fprintf(writer, "Id	Date and time of order	Order type	"+
+	fmt.Fprintf(writer, "\nId	Date and time of order	Order type	"+
 		"Pay amount		Currency 	Exchange rate	\n")
 	for orders.Next() {
 		var order models.Order
@@ -92,6 +100,7 @@ func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
 		fmt.Fprintf(writer, "%d %s %s %f %s %f\n", order.Id, order.OrderTimeStamp, order.OrderType, order.Amount,
 			order.Currency, order.ExchangeRate)
 	}
+	fmt.Fprintf(writer, "\n")
 
 	if err := orders.Err(); err != nil {
 		fmt.Fprintf(writer, "Couldn't read order: %v\n", err)
@@ -170,4 +179,49 @@ func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbControl
 	if err := rows.Err(); err != nil {
 		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
 	}
+}
+
+func updateOrderType(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
+	var orderTypeNew string
+	var orderId int
+
+	fmt.Fprintf(writer, "Enter order id: ")
+	_, err := fmt.Fscan(reader, &orderId)
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
+		return
+	}
+
+	fmt.Fprintf(writer, "Enter new order type: ")
+
+	_, err = fmt.Fscan(reader, &orderTypeNew)
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
+		return
+	}
+
+	err = controller.UpdateOrder(orderId, orderTypeNew)
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
+		return
+	}
+
+	fmt.Fprintf(writer, "Order updated successfully\n\n")
+}
+
+func deleteOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
+	var orderId int
+	fmt.Fprintf(writer, "\nEnter order id: ")
+
+	_, err := fmt.Fscan(reader, &orderId)
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't delete order: %v\n", err)
+	}
+
+	err = controller.DeleteOrder(orderId)
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't delete order: %v\n", err)
+	}
+
+	fmt.Fprintf(writer, "Order deleted successfully\n\n")
 }
