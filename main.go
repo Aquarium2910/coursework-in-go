@@ -15,17 +15,21 @@ const dbURL = "postgres://user:password@localhost:5432/mydb"
 const (
 	biggestOrdersLimit         = 5
 	typesOfSmallestOrdersLimit = 6
+
+	typeOfOrdersLessThan = "харчування"
+	lessThanЕhreshold    = 50
 )
 
 const (
-	listAllOrders         = "1. List all orders"
-	addNewOrder           = "2. Add new order"
-	updateOrder           = "3. Update order type"
-	deleteOrderString     = "4. Delete order"
-	biggestOrdersDates    = "5. Show 5 dates with biggest orders"
-	ordersWhenRateChanged = "6. Show orders at days when exchangerate changed"
-	typesOfSmallestOrders = "8. Show types of 6 smallest orders"
-	exitProgram           = "9. Exit program"
+	listAllOrders          = "1. List all orders"
+	addNewOrder            = "2. Add new order"
+	updateOrder            = "3. Update order type"
+	deleteOrderString      = "4. Delete order"
+	biggestOrdersDates     = "5. Show 5 dates with biggest orders"
+	ordersWhenRateChanged  = "6. Show orders at days when exchangerate changed"
+	avgNumOrdersLessThen50 = "7. Show avg number of orders of type food less than 50 UAH per months"
+	typesOfSmallestOrders  = "8. Show types of 6 smallest orders"
+	exitProgram            = "9. Exit program"
 
 	printLimit    = "How many items to print? (0 will print all items)"
 	invalidChoice = "Invalid choice"
@@ -55,6 +59,7 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		fmt.Fprintf(writer, deleteOrderString+"\n")
 		fmt.Fprintf(writer, biggestOrdersDates+"\n")
 		fmt.Fprintf(writer, ordersWhenRateChanged+"\n")
+		fmt.Fprintf(writer, avgNumOrdersLessThen50+"\n")
 		fmt.Fprintf(writer, typesOfSmallestOrders+"\n")
 		fmt.Fprintf(writer, exitProgram+"\n")
 
@@ -82,6 +87,8 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 			ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
 		case "6":
 			ShowOrdersWhenRateChanged(writer, controller)
+		case "7":
+			ShowAvgNumOfOrdersLessThen(writer, controller, typeOfOrdersLessThan, lessThanЕhreshold)
 		case "8":
 			ShowTypesOfSmallestOrders(writer, controller, typesOfSmallestOrdersLimit)
 		case "9":
@@ -283,4 +290,19 @@ func ShowOrdersWhenRateChanged(writer io.Writer, controller *postgres.DbControll
 	if err = rows.Err(); err != nil {
 		fmt.Fprintf(writer, "Couldn't read order: %v\n", err)
 	}
+}
+
+func ShowAvgNumOfOrdersLessThen(writer io.Writer, controller *postgres.DbController, orderType string, lessThen float64) {
+	var avgNum float64
+	row := controller.GetAvgNumOfOrdersLessThan(orderType, lessThen)
+	if row == nil {
+		fmt.Fprintf(writer, "Couldn't show avg num of orders less then %f.\n", lessThen)
+	}
+
+	err := row.Scan(&avgNum)
+	if err != nil {
+		fmt.Fprintf(writer, "Error while scanning avg num: %v\n", err)
+	}
+
+	fmt.Fprintf(writer, "\nAvg num of orders of type %s per month less then %.2f: %.2f\n", orderType, lessThen, avgNum)
 }

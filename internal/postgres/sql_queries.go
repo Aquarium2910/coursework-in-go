@@ -36,6 +36,12 @@ const (
     GROUP BY orderdate, currency
     HAVING COUNT(DISTINCT exchangerate) > 1)
 	ORDER BY orderdate, currency`
+	avgNOfOrdersFoodLessThan = `SELECT (SELECT COUNT(*) FROM orders
+        WHERE ordertype LIKE $1
+          AND (amount*exchangerate) < $2) * 1.0
+/
+(SELECT COUNT (DISTINCT to_char(orderdate, 'YYYY-MM'))
+FROM orders) AS  avg_less_then`
 
 	addNewOrder = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
 		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
@@ -136,4 +142,9 @@ func (c *DbController) OrdersWhenRateChanged() (pgx.Rows, error) {
 	}
 
 	return rows, nil
+}
+
+func (c *DbController) GetAvgNumOfOrdersLessThan(orderType string, lessThen float64) pgx.Row {
+	row := c.dbPool.QueryRow(c.ctx, avgNOfOrdersFoodLessThan, orderType, lessThen)
+	return row
 }
