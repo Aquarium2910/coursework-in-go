@@ -23,6 +23,7 @@ const (
 	updateOrder           = "3. Update order type"
 	deleteOrderString     = "4. Delete order"
 	biggestOrdersDates    = "5. Show 5 dates with biggest orders"
+	ordersWhenRateChanged = "6. Show orders at days when exchangerate changed"
 	typesOfSmallestOrders = "8. Show types of 6 smallest orders"
 	exitProgram           = "9. Exit program"
 
@@ -53,6 +54,7 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		fmt.Fprintf(writer, updateOrder+"\n")
 		fmt.Fprintf(writer, deleteOrderString+"\n")
 		fmt.Fprintf(writer, biggestOrdersDates+"\n")
+		fmt.Fprintf(writer, ordersWhenRateChanged+"\n")
 		fmt.Fprintf(writer, typesOfSmallestOrders+"\n")
 		fmt.Fprintf(writer, exitProgram+"\n")
 
@@ -78,6 +80,8 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 			deleteOrder(writer, reader, controller)
 		case "5":
 			ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
+		case "6":
+			ShowOrdersWhenRateChanged(writer, controller)
 		case "8":
 			ShowTypesOfSmallestOrders(writer, controller, typesOfSmallestOrdersLimit)
 		case "9":
@@ -254,5 +258,29 @@ func ShowTypesOfSmallestOrders(writer io.Writer, controller *postgres.DbControll
 		}
 
 		fmt.Fprintf(writer, "%s\n", orderType)
+	}
+}
+
+func ShowOrdersWhenRateChanged(writer io.Writer, controller *postgres.DbController) {
+	var order models.Order
+	rows, err := controller.OrdersWhenRateChanged()
+
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't show orders when rate changed: %v\n", err)
+	}
+	defer rows.Close()
+
+	fmt.Fprintf(writer, "\nId	Date and time of order	Order type	"+
+		"Pay amount		Currency 	Exchange rate	\n")
+
+	for rows.Next() {
+		err = rows.Scan(&order.Id, &order.OrderTimeStamp, &order.OrderType, &order.Amount, &order.Currency, &order.ExchangeRate)
+		fmt.Fprintf(writer, "%d %s %s %f %s %f\n", order.Id, order.OrderTimeStamp, order.OrderType, order.Amount,
+			order.Currency, order.ExchangeRate)
+	}
+	fmt.Fprintf(writer, "\n")
+
+	if err = rows.Err(); err != nil {
+		fmt.Fprintf(writer, "Couldn't read order: %v\n", err)
 	}
 }

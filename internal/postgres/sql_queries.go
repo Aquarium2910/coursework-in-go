@@ -29,6 +29,13 @@ const (
                               (SELECT ordertype, amount FROM orders
                               ORDER BY amount ASC
                               LIMIT $1)`
+	selectOrdersWhenRateChanges = `SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
+	FROM orders
+	WHERE (orderdate, currency) IN (
+    SELECT orderdate, currency FROM ORDERS
+    GROUP BY orderdate, currency
+    HAVING COUNT(DISTINCT exchangerate) > 1)
+	ORDER BY orderdate, currency`
 
 	addNewOrder = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
 		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
@@ -115,6 +122,15 @@ func (c *DbController) DatesWithBiggestOrders(limit int) (pgx.Rows, error) {
 
 func (c *DbController) TypeOfSmallestOrders(limit int) (pgx.Rows, error) {
 	rows, err := c.dbPool.Query(c.ctx, selectTypeOfSmallestOrders, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return rows, nil
+}
+
+func (c *DbController) OrdersWhenRateChanged() (pgx.Rows, error) {
+	rows, err := c.dbPool.Query(c.ctx, selectOrdersWhenRateChanges)
 	if err != nil {
 		return nil, err
 	}
