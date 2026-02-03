@@ -43,6 +43,46 @@ const (
 (SELECT COUNT (DISTINCT to_char(orderdate, 'YYYY-MM'))
 FROM orders) AS  avg_less_then`
 
+	//Returns table with statistics for each period
+	statsFor8HrPeriods = `
+	SELECT
+		CASE
+			WHEN ordertime >= '00:00:00' AND ordertime < '08:00:00' THEN '00:00 - 08:00'
+			WHEN ordertime >= '08:00:00' AND ordertime < '16:00:00' THEN '08:00 - 16:00'
+			ELSE '16:00 - 23:59'
+		END AS time_period,
+	
+		COUNT(*) AS total_sales,
+	
+		COUNT(*) FILTER (WHERE(amount*exchangerate) > 1000) AS big_sales,
+	
+		COUNT(*) FILTER (WHERE(amount*exchangerate) <= 1000) AS small_sales
+	FROM orders
+	GROUP BY
+		1
+	ORDER BY time_period`
+
+	mostSales = `
+		WITH stats AS (
+				SELECT
+						CASE
+							WHEN ordertime >= '00:00:00' AND ordertime < '08:00:00' THEN '00:00 - 08:00'
+							WHEN ordertime >= '08:00:00' AND ordertime < '16:00:00' THEN '08:00 - 16:00'
+							ELSE '16:00 - 23:59'
+						END AS time_period,
+					
+						COUNT(*) AS total_sales,
+					
+						COUNT(*) FILTER (WHERE(amount*exchangerate) > 1000) AS big_sales,
+					
+						COUNT(*) FILTER (WHERE(amount*exchangerate) <= 1000) AS small_sales
+					FROM orders
+					GROUP BY 1)
+		SELECT time_period, total_sales
+		FROM stats
+		ORDER BY total_sales DESC
+		LIMIT 1`
+
 	addNewOrder = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
 		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
 
@@ -147,4 +187,13 @@ func (c *DbController) OrdersWhenRateChanged() (pgx.Rows, error) {
 func (c *DbController) GetAvgNumOfOrdersLessThan(orderType string, lessThen float64) pgx.Row {
 	row := c.dbPool.QueryRow(c.ctx, avgNOfOrdersFoodLessThan, orderType, lessThen)
 	return row
+}
+
+func (c *DbController) GetTableForPeriods() (pgx.Rows, error) {
+	rows, err := c.dbPool.Query(c.ctx, statsFor8HrPeriods)
+	if err != nil {
+		return nil, err
+	}
+
+	return rows, nil
 }

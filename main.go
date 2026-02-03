@@ -26,10 +26,11 @@ const (
 	updateOrder            = "3. Update order type"
 	deleteOrderString      = "4. Delete order"
 	biggestOrdersDates     = "5. Show 5 dates with biggest orders"
-	ordersWhenRateChanged  = "6. Show orders at days when exchangerate changed"
+	ordersWhenRateChanged  = "6. Show orders at days when exchange rate changed"
 	avgNumOrdersLessThen50 = "7. Show avg number of orders of type food less than 50 UAH per months"
 	typesOfSmallestOrders  = "8. Show types of 6 smallest orders"
-	exitProgram            = "9. Exit program"
+	statsFor8HrPeriods     = "9. Show stats for 8 hours periods"
+	exitProgram            = "10. Exit program"
 
 	printLimit    = "How many items to print? (0 will print all items)"
 	invalidChoice = "Invalid choice"
@@ -61,10 +62,14 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		fmt.Fprintf(writer, ordersWhenRateChanged+"\n")
 		fmt.Fprintf(writer, avgNumOrdersLessThen50+"\n")
 		fmt.Fprintf(writer, typesOfSmallestOrders+"\n")
+		fmt.Fprintf(writer, statsFor8HrPeriods+"\n")
 		fmt.Fprintf(writer, exitProgram+"\n")
 
 		var userChoice string
-		fmt.Fscan(reader, &userChoice)
+		_, err := fmt.Fscan(reader, &userChoice)
+		if err != nil {
+			return err
+		}
 
 		switch userChoice {
 		case "1":
@@ -92,6 +97,8 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		case "8":
 			ShowTypesOfSmallestOrders(writer, controller, typesOfSmallestOrdersLimit)
 		case "9":
+			ShowStatsForPeriods(writer, controller)
+		case "10":
 			return fmt.Errorf("Exit program")
 		default:
 			fmt.Fprintf(writer, invalidChoice+"\n\n")
@@ -305,4 +312,27 @@ func ShowAvgNumOfOrdersLessThen(writer io.Writer, controller *postgres.DbControl
 	}
 
 	fmt.Fprintf(writer, "\nAvg num of orders of type %s per month less then %.2f: %.2f\n", orderType, lessThen, avgNum)
+}
+
+func ShowStatsForPeriods(writer io.Writer, controller *postgres.DbController) {
+	var timePeriod string
+	var totalSales int
+	var bigSales int
+	var smallSales int
+
+	rows, err := controller.GetTableForPeriods()
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't show stats for periods: %v\n", err)
+	}
+	defer rows.Close()
+
+	fmt.Fprintf(writer, "\nTime period\t\t Total\t   Big\t  Small\n")
+	for rows.Next() {
+		err = rows.Scan(&timePeriod, &totalSales, &bigSales, &smallSales)
+		if err != nil {
+			fmt.Fprintf(writer, "Couldn't show stats for periods: %v\n", err)
+		}
+
+		fmt.Fprintf(writer, "%s\t%5d\t%5d\t%5d\n", timePeriod, totalSales, bigSales, smallSales)
+	}
 }
