@@ -2,15 +2,16 @@ package main
 
 import (
 	"bufio"
+	"coursework/internal/frontend"
 	"coursework/internal/models"
 	"coursework/internal/postgres"
 	"fmt"
 	"io"
 	"os"
 	"time"
-)
 
-const dbURL = "postgres://user:password@localhost:5432/mydb"
+	"github.com/joho/godotenv"
+)
 
 const (
 	biggestOrdersLimit         = 5
@@ -20,25 +21,10 @@ const (
 	lessThanЕhreshold    = 50
 )
 
-const (
-	listAllOrders          = "1. List all orders"
-	addNewOrder            = "2. Add new order"
-	updateOrder            = "3. Update order type"
-	deleteOrderString      = "4. Delete order"
-	biggestOrdersDates     = "5. Show 5 dates with biggest orders"
-	ordersWhenRateChanged  = "6. Show orders at days when exchange rate changed"
-	avgNumOrdersLessThen50 = "7. Show avg number of orders of type food less than 50 UAH per months"
-	typesOfSmallestOrders  = "8. Show types of 6 smallest orders"
-	statsFor8HrPeriods     = "9. Show stats for 8 hours periods"
-	exitProgram            = "10. Exit program"
-
-	printLimit    = "How many items to print? (0 will print all items)"
-	invalidChoice = "Invalid choice"
-
-	timeFormat = "2006-01-02 15:04:05"
-)
-
 func main() {
+	_ = godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+
 	controller := postgres.NewDbController(dbURL)
 	defer controller.Close()
 
@@ -54,16 +40,7 @@ func main() {
 
 func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
 	for {
-		fmt.Fprintf(writer, "\n"+listAllOrders+"\n")
-		fmt.Fprintf(writer, addNewOrder+"\n")
-		fmt.Fprintf(writer, updateOrder+"\n")
-		fmt.Fprintf(writer, deleteOrderString+"\n")
-		fmt.Fprintf(writer, biggestOrdersDates+"\n")
-		fmt.Fprintf(writer, ordersWhenRateChanged+"\n")
-		fmt.Fprintf(writer, avgNumOrdersLessThen50+"\n")
-		fmt.Fprintf(writer, typesOfSmallestOrders+"\n")
-		fmt.Fprintf(writer, statsFor8HrPeriods+"\n")
-		fmt.Fprintf(writer, exitProgram+"\n")
+		frontend.PrintOptions(writer)
 
 		var userChoice string
 		_, err := fmt.Fscan(reader, &userChoice)
@@ -74,10 +51,10 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		switch userChoice {
 		case "1":
 			var limit int
-			fmt.Fprintf(writer, printLimit+"\n")
+			fmt.Fprintf(writer, frontend.PrintLimit+"\n")
 			fmt.Fscan(reader, &limit)
 
-			printDb(writer, controller, limit)
+			printDbNew(writer, controller, limit)
 
 		case "2":
 			isOk := formNewOrder(writer, reader, controller)
@@ -101,42 +78,26 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		case "10":
 			return fmt.Errorf("Exit program")
 		default:
-			fmt.Fprintf(writer, invalidChoice+"\n\n")
+			fmt.Fprintf(writer, frontend.InvalidChoice+"\n\n")
 		}
 
 	}
 }
 
-func printDb(writer io.Writer, controller *postgres.DbController, limit int) {
-	orders, err := controller.SelectAllOrders(limit)
+func printDbNew(writer io.Writer, controller *postgres.DbController, limit int) {
+	orders, err := controller.SelectAllOrdersNew(limit)
 	if err != nil {
-		fmt.Fprintf(writer, "Couldn't select all orders: %v\n", err)
-		return
+		fmt.Fprintln(writer, err)
 	}
-	defer orders.Close()
 
-	fmt.Fprintf(writer, "\nId	Date and time of order	Order type	"+
-		"Pay amount		Currency 	Exchange rate	\n")
-	for orders.Next() {
-		var order models.Order
-
-		err = orders.Scan(&order.Id, &order.OrderTimeStamp, &order.OrderType, &order.Amount, &order.Currency, &order.ExchangeRate)
-
-		fmt.Fprintf(writer, "%d %s %s %f %s %f\n", order.Id, order.OrderTimeStamp, order.OrderType, order.Amount,
-			order.Currency, order.ExchangeRate)
-	}
-	fmt.Fprintf(writer, "\n")
-
-	if err := orders.Err(); err != nil {
-		fmt.Fprintf(writer, "Couldn't read order: %v\n", err)
-	}
+	frontend.PrintTable(writer, orders)
 }
 
 func formNewOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) bool {
 	var order models.Order
 
 	scanner := bufio.NewScanner(reader)
-	fmt.Fprintf(writer, "Write the date and time of order in following format: (%s)\n", timeFormat)
+	fmt.Fprintf(writer, "Write the date and time of order in following format: (%s)\n", frontend.TimeFormat)
 	fmt.Fprintf(writer, "Order date: ")
 	if scanner.Scan() {
 		order.OrderTimeStampInput = scanner.Text()
@@ -146,7 +107,7 @@ func formNewOrder(writer io.Writer, reader io.Reader, controller *postgres.DbCon
 		return false
 	}
 
-	order.OrderTimeStamp, err = time.Parse(timeFormat, order.OrderTimeStampInput)
+	order.OrderTimeStamp, err = time.Parse(frontend.TimeFormat, order.OrderTimeStampInput)
 	if err != nil {
 		return false
 	}

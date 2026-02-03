@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"coursework/internal/models"
 	"fmt"
 	"os"
 	"time"
@@ -108,12 +109,37 @@ func (c *DbController) Close() {
 	c.dbPool.Close()
 }
 
-func (c *DbController) SelectAllOrders(limit int) (pgx.Rows, error) {
+func (c *DbController) SelectAllOrdersNew(limit int) ([]models.Orders, error) {
+	var rows pgx.Rows
+	var err error
+
 	if limit == 0 {
-		return c.dbPool.Query(c.ctx, selectAllOrders)
+		rows, err = c.dbPool.Query(c.ctx, selectAllOrders)
+	} else {
+		rows, err = c.dbPool.Query(c.ctx, selectAllOrdersWithLimit, limit)
 	}
 
-	return c.dbPool.Query(c.ctx, selectAllOrdersWithLimit, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error selecting all orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []models.Orders
+	for i := 0; rows.Next(); i++ {
+		orders = append(orders, models.Orders{})
+		err = rows.Scan(&orders[i].Id, &orders[i].TimeStamp, &orders[i].Type, &orders[i].Amount, &orders[i].Currency,
+			&orders[i].ExchangeRate)
+
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("couldn't read order: %w", err)
+	}
+
+	return orders, nil
 }
 
 func (c *DbController) AddNewOrder(orderDate time.Time, orderType string, amount float64, currency string, exchangerate float64) bool {
