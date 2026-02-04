@@ -16,50 +16,6 @@ type DbController struct {
 	dbPool *pgxpool.Pool
 }
 
-const (
-	selectDatesWithBiggestOrders = `
-		SELECT orderdate, SUM(amount*exchangerate) as total_uah FROM orders
-		GROUP BY orderdate
-		ORDER BY total_uah DESC 
-		LIMIT $1`
-	selectTypeOfSmallestOrders = `SELECT DISTINCT ordertype FROM
-                              (SELECT ordertype, amount FROM orders
-                              ORDER BY amount ASC
-                              LIMIT $1)`
-	selectOrdersWhenRateChanges = `SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
-	FROM orders
-	WHERE (orderdate, currency) IN (
-    SELECT orderdate, currency FROM ORDERS
-    GROUP BY orderdate, currency
-    HAVING COUNT(DISTINCT exchangerate) > 1)
-	ORDER BY orderdate, currency`
-	avgNOfOrdersFoodLessThan = `SELECT (SELECT COUNT(*) FROM orders
-        WHERE ordertype LIKE $1
-          AND (amount*exchangerate) < $2) * 1.0
-/
-(SELECT COUNT (DISTINCT to_char(orderdate, 'YYYY-MM'))
-FROM orders) AS  avg_less_then`
-
-	//Returns table with statistics for each period
-	statsFor8HrPeriods = `
-	SELECT
-		CASE
-			WHEN ordertime >= '00:00:00' AND ordertime < '08:00:00' THEN '00:00 - 08:00'
-			WHEN ordertime >= '08:00:00' AND ordertime < '16:00:00' THEN '08:00 - 16:00'
-			ELSE '16:00 - 23:59'
-		END AS time_period,
-	
-		COUNT(*) AS total_sales,
-	
-		COUNT(*) FILTER (WHERE(amount*exchangerate) > 1000) AS big_sales,
-	
-		COUNT(*) FILTER (WHERE(amount*exchangerate) <= 1000) AS small_sales
-	FROM orders
-	GROUP BY
-		1
-	ORDER BY time_period`
-)
-
 func NewDbController(dbURL string) *DbController {
 	ctx := context.Background()
 	dbPool, err := pgxpool.New(ctx, dbURL)
@@ -75,7 +31,7 @@ func (c *DbController) Close() {
 	c.dbPool.Close()
 }
 
-func (c *DbController) SelectAllOrdersNew(limit int) ([]models.Orders, error) {
+func (c *DbController) SelectAllOrders(limit int) ([]models.Order, error) {
 	const (
 		query          = "SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate FROM orders"
 		queryWithLimit = `SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
@@ -97,9 +53,9 @@ func (c *DbController) SelectAllOrdersNew(limit int) ([]models.Orders, error) {
 	}
 	defer rows.Close()
 
-	var orders []models.Orders
+	var orders []models.Order
 	for i := 0; rows.Next(); i++ {
-		orders = append(orders, models.Orders{})
+		orders = append(orders, models.Order{})
 		err = rows.Scan(&orders[i].Id, &orders[i].TimeStamp, &orders[i].Type, &orders[i].Amount, &orders[i].Currency,
 			&orders[i].ExchangeRate)
 
@@ -115,7 +71,7 @@ func (c *DbController) SelectAllOrdersNew(limit int) ([]models.Orders, error) {
 	return orders, nil
 }
 
-func (c *DbController) AddNewOrderNew(orderDate time.Time, orderType string, amount float64, currency string, exchangerate float64) error {
+func (c *DbController) AddNewOrder(orderDate time.Time, orderType string, amount float64, currency string, exchangerate float64) error {
 	const query = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
 		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
 
@@ -132,7 +88,7 @@ func (c *DbController) AddNewOrderNew(orderDate time.Time, orderType string, amo
 	return nil
 }
 
-func (c *DbController) UpdateOrderNew(orderId int, orderType string) error {
+func (c *DbController) UpdateOrder(orderId int, orderType string) error {
 	const query = `UPDATE orders 
 					SET ordertype = $1
 					WHERE id = $2`
@@ -149,7 +105,7 @@ func (c *DbController) UpdateOrderNew(orderId int, orderType string) error {
 	return nil
 }
 
-func (c *DbController) DeleteOrderNew(orderId int) error {
+func (c *DbController) DeleteOrder(orderId int) error {
 	const query = `DELETE FROM orders WHERE id = $1`
 
 	report, err := c.dbPool.Exec(c.ctx, query, orderId)
@@ -164,7 +120,7 @@ func (c *DbController) DeleteOrderNew(orderId int) error {
 	return nil
 }
 
-func (c *DbController) DatesWithBiggestOrdersNew(limit int) ([]models.BiggestOrders, error) {
+func (c *DbController) DatesWithBiggestOrders(limit int) ([]models.BiggestOrders, error) {
 	const query = `
 		SELECT orderdate, SUM(amount*exchangerate) as total_uah FROM orders
 		GROUP BY orderdate
@@ -196,34 +152,124 @@ func (c *DbController) DatesWithBiggestOrdersNew(limit int) ([]models.BiggestOrd
 	return orders, nil
 }
 
-func (c *DbController) TypeOfSmallestOrders(limit int) (pgx.Rows, error) {
-	rows, err := c.dbPool.Query(c.ctx, selectTypeOfSmallestOrders, limit)
+func (c *DbController) TypeOfSmallestOrders(limit int) ([]string, error) {
+	const query = `SELECT DISTINCT ordertype FROM
+                              (SELECT ordertype, amount FROM orders
+                              ORDER BY amount ASC
+                              LIMIT $1)`
+
+	rows, err := c.dbPool.Query(c.ctx, query, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting type of smallest orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orderTypes []string
+	var res string
+	for rows.Next() {
+		err = rows.Scan(&res)
+		if err != nil {
+			return nil, fmt.Errorf("error getting type of smallest orders: %w", err)
+		}
+		orderTypes = append(orderTypes, res)
 	}
 
-	return rows, nil
+	return orderTypes, nil
 }
 
-func (c *DbController) OrdersWhenRateChanged() (pgx.Rows, error) {
-	rows, err := c.dbPool.Query(c.ctx, selectOrdersWhenRateChanges)
+func (c *DbController) OrdersWhenRateChanged() ([]models.Order, error) {
+	const query = `
+		SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
+		FROM orders
+		WHERE (orderdate, currency) IN (
+		SELECT orderdate, currency FROM ORDERS
+		GROUP BY orderdate, currency
+		HAVING COUNT(DISTINCT exchangerate) > 1)
+		ORDER BY orderdate, currency`
+
+	rows, err := c.dbPool.Query(c.ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting orders when rate changed: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for i := 0; rows.Next(); i++ {
+		orders = append(orders, models.Order{})
+		err = rows.Scan(&orders[i].Id, &orders[i].TimeStamp, &orders[i].Type, &orders[i].Amount, &orders[i].Currency,
+			&orders[i].ExchangeRate)
+
+		if err != nil {
+			return nil, fmt.Errorf("error getting orders when rate changed: %w", err)
+		}
 	}
 
-	return rows, nil
-}
-
-func (c *DbController) GetAvgNumOfOrdersLessThan(orderType string, lessThen float64) pgx.Row {
-	row := c.dbPool.QueryRow(c.ctx, avgNOfOrdersFoodLessThan, orderType, lessThen)
-	return row
-}
-
-func (c *DbController) GetTableForPeriods() (pgx.Rows, error) {
-	rows, err := c.dbPool.Query(c.ctx, statsFor8HrPeriods)
-	if err != nil {
-		return nil, err
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error getting orders when rate changed: %w", err)
 	}
 
-	return rows, nil
+	return orders, nil
+}
+
+func (c *DbController) GetAvgNumOfOrdersLessThan(orderType string, lessThen float64) (float64, error) {
+	const query = `SELECT (SELECT COUNT(*) FROM orders
+				WHERE ordertype LIKE $1
+				  AND (amount*exchangerate) < $2) * 1.0
+		/
+		(SELECT COUNT (DISTINCT to_char(orderdate, 'YYYY-MM'))
+		FROM orders) AS  avg_less_then`
+
+	row := c.dbPool.QueryRow(c.ctx, query, orderType, lessThen)
+	if row == nil {
+		return 0, fmt.Errorf("couldn't show avg num of orders less then %f", lessThen)
+	}
+
+	var avgNum float64
+	err := row.Scan(&avgNum)
+	if err != nil {
+		return 0, fmt.Errorf("couldn't show avg num of orders less then %f: %w", lessThen, err)
+	}
+
+	return avgNum, nil
+}
+
+func (c *DbController) GetTableForPeriods() ([]models.PeriodStats, error) {
+	const query = `
+	SELECT
+		CASE
+			WHEN ordertime >= '00:00:00' AND ordertime < '08:00:00' THEN '00:00 - 08:00'
+			WHEN ordertime >= '08:00:00' AND ordertime < '16:00:00' THEN '08:00 - 16:00'
+			ELSE '16:00 - 23:59'
+		END AS time_period,
+	
+		COUNT(*) AS total_sales,
+	
+		COUNT(*) FILTER (WHERE(amount*exchangerate) > 1000) AS big_sales,
+	
+		COUNT(*) FILTER (WHERE(amount*exchangerate) <= 1000) AS small_sales
+	FROM orders
+	GROUP BY
+		1
+	ORDER BY time_period`
+
+	rows, err := c.dbPool.Query(c.ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error getting table for stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []models.PeriodStats
+	for i := 0; rows.Next(); i++ {
+		stats = append(stats, models.PeriodStats{})
+		err = rows.Scan(&stats[i].TimePeriod, &stats[i].TotalSales, &stats[i].BigSales, &stats[i].SmallSales)
+		if err != nil {
+			return nil, fmt.Errorf("error getting table for stats: %w", err)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error getting table for stats: %w", err)
+	}
+
+	return stats, nil
 }

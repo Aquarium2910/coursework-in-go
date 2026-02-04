@@ -3,16 +3,6 @@ package models
 import "time"
 
 type Order struct {
-	Id                  int
-	OrderTimeStamp      time.Time
-	OrderType           string
-	Amount              float64
-	Currency            string
-	ExchangeRate        float64
-	OrderTimeStampInput string
-	TotalUah            float64
-}
-type Orders struct {
 	Id           int
 	TimeStamp    time.Time
 	Type         string
@@ -24,4 +14,11 @@ type Orders struct {
 type BiggestOrders struct {
 	Date     time.Time
 	TotalUah float64
+}
+
+type PeriodStats struct {
+	TimePeriod string
+	TotalSales int
+	BigSales   int
+	SmallSales int
 }

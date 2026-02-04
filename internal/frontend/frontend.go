@@ -37,7 +37,7 @@ func PrintOptions(writer io.Writer) {
 	fmt.Fprintf(writer, exitProgram+"\n")
 }
 
-func PrintTable(writer io.Writer, orders []models.Orders) {
+func PrintTable(writer io.Writer, orders []models.Order) {
 	fmt.Fprintf(writer, "\nId	Date and time of order	Order type	"+
 		"Pay amount		Currency 	Exchange rate	\n")
 	for _, order := range orders {
@@ -50,6 +50,13 @@ func PrintBiggestOrders(writer io.Writer, orders []models.BiggestOrders) {
 	fmt.Fprintf(writer, "\n\tDate\t\tAmount\n")
 	for _, order := range orders {
 		fmt.Fprintf(writer, "%s   %f\n", order.Date.Format("2006-01-02"), order.TotalUah)
+	}
+}
+
+func PrintStats(writer io.Writer, stats []models.PeriodStats) {
+	fmt.Fprintf(writer, "\nTime period\t\t Total\t   Big\t  Small\n")
+	for _, stat := range stats {
+		fmt.Fprintf(writer, "%s\t%5d\t%5d\t%5d\n", stat.TimePeriod, stat.TotalSales, stat.BigSales, stat.SmallSales)
 	}
 }
 
