@@ -96,63 +96,50 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 
 		case "2":
 			err = formNewOrder(writer, reader, controller)
-			if err != nil {
-				slog.Error("error forming new order", "error", err)
-				fmt.Fprintln(writer, "Something went wrong, try again.")
-			} else {
+			HandleError(writer, err)
+			if err == nil {
 				fmt.Fprintf(writer, "\nSuccessfully added new order!\n")
 			}
 		case "3":
 			err = updateOrderType(writer, reader, controller)
-			if err != nil {
-				slog.Error("", "error", err)
-				fmt.Fprintln(writer, "Something went wrong, try again.")
-			} else {
+			HandleError(writer, err)
+			if err == nil {
 				fmt.Fprintf(writer, "\nOrder updated successfully\n")
 			}
 		case "4":
 			err = deleteOrder(writer, reader, controller)
-			if err != nil {
-				slog.Error("", "error", err)
-				fmt.Fprintln(writer, "Something went wrong, try again.")
-			} else {
+			HandleError(writer, err)
+			if err == nil {
 				fmt.Fprintf(writer, "Order deleted successfully\n")
 			}
 		case "5":
 			err = ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
-			if err != nil {
-				slog.Error("", "error", err)
-				fmt.Fprintln(writer, "Something went wrong, try again.")
-			}
+			HandleError(writer, err)
 		case "6":
 			err = ShowOrdersWhenRateChanged(writer, controller)
-			if err != nil {
-				slog.Error("", "error", err)
-				fmt.Fprintln(writer, "Something went wrong, try again.")
-			}
+			HandleError(writer, err)
 		case "7":
 			err = ShowAvgNumOfOrdersLessThen(writer, controller, typeOfOrdersLessThan, lessThanThreshold)
-			if err != nil {
-				slog.Error("", "error", err)
-				fmt.Fprintln(writer, "Something went wrong, try again.")
-			}
+			HandleError(writer, err)
 		case "8":
 			err = ShowTypesOfSmallestOrders(writer, controller, typesOfSmallestOrdersLimit)
-			if err != nil {
-				slog.Error("", "error", err)
-			}
+			HandleError(writer, err)
 		case "9":
 			err = ShowStatsForPeriods(writer, controller)
-			if err != nil {
-				slog.Error("", "error", err)
-				fmt.Fprintln(writer, "Something went wrong, try again.")
-			}
+			HandleError(writer, err)
 		case "10":
 			return fmt.Errorf("exit program")
 		default:
 			fmt.Fprintf(writer, frontend.InvalidChoice+"\n\n")
 		}
 
+	}
+}
+
+func HandleError(writer io.Writer, err error) {
+	if err != nil {
+		slog.Error("", "error", err)
+		fmt.Fprintln(writer, "Something went wrong, try again.")
 	}
 }
 

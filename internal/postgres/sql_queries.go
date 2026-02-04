@@ -54,14 +54,13 @@ func (c *DbController) SelectAllOrders(limit int) ([]models.Order, error) {
 	defer rows.Close()
 
 	var orders []models.Order
-	for i := 0; rows.Next(); i++ {
-		orders = append(orders, models.Order{})
-		err = rows.Scan(&orders[i].Id, &orders[i].TimeStamp, &orders[i].Type, &orders[i].Amount, &orders[i].Currency,
-			&orders[i].ExchangeRate)
-
+	for rows.Next() {
+		o := models.Order{}
+		err = rows.Scan(&o.Id, &o.TimeStamp, &o.Type, &o.Amount, &o.Currency, &o.ExchangeRate)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
+		orders = append(orders, o)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -182,7 +181,7 @@ func (c *DbController) OrdersWhenRateChanged() ([]models.Order, error) {
 		SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
 		FROM orders
 		WHERE (orderdate, currency) IN (
-		SELECT orderdate, currency FROM ORDERS
+		SELECT orderdate, currency FROM orders
 		GROUP BY orderdate, currency
 		HAVING COUNT(DISTINCT exchangerate) > 1)
 		ORDER BY orderdate, currency`
@@ -194,14 +193,13 @@ func (c *DbController) OrdersWhenRateChanged() ([]models.Order, error) {
 	defer rows.Close()
 
 	var orders []models.Order
-	for i := 0; rows.Next(); i++ {
-		orders = append(orders, models.Order{})
-		err = rows.Scan(&orders[i].Id, &orders[i].TimeStamp, &orders[i].Type, &orders[i].Amount, &orders[i].Currency,
-			&orders[i].ExchangeRate)
-
+	for rows.Next() {
+		o := models.Order{}
+		err = rows.Scan(&o.Id, &o.TimeStamp, &o.Type, &o.Amount, &o.Currency, &o.ExchangeRate)
 		if err != nil {
-			return nil, fmt.Errorf("error getting orders when rate changed: %w", err)
+			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
+		orders = append(orders, o)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -220,9 +218,6 @@ func (c *DbController) GetAvgNumOfOrdersLessThan(orderType string, lessThen floa
 		FROM orders) AS  avg_less_then`
 
 	row := c.dbPool.QueryRow(c.ctx, query, orderType, lessThen)
-	if row == nil {
-		return 0, fmt.Errorf("couldn't show avg num of orders less then %f", lessThen)
-	}
 
 	var avgNum float64
 	err := row.Scan(&avgNum)
