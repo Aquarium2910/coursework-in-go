@@ -138,27 +138,27 @@ func (c *DbController) AddNewOrderNew(orderDate time.Time, orderType string, amo
 	return nil
 }
 
-func (c *DbController) UpdateOrder(orderId int, orderType string) error {
+func (c *DbController) UpdateOrderNew(orderId int, orderType string) error {
 	report, err := c.dbPool.Exec(c.ctx, updateOrder, orderType, orderId)
 	if err != nil {
-		return err
+		return fmt.Errorf("error updating order: %w", err)
 	}
 
 	if report.RowsAffected() == 0 {
-		fmt.Fprintf(os.Stderr, "Error updating order: row with id %d is not found\n", orderId)
+		return fmt.Errorf("error updating order: row with id %d is not found", orderId)
 	}
 
 	return nil
 }
 
-func (c *DbController) DeleteOrder(orderId int) error {
+func (c *DbController) DeleteOrderNew(orderId int) error {
 	report, err := c.dbPool.Exec(c.ctx, deleteOrder, orderId)
 	if err != nil {
-		return err
+		return fmt.Errorf("error deleting order: %w", err)
 	}
 
 	if report.RowsAffected() == 0 {
-		fmt.Fprintf(os.Stderr, "Error deleting order: row with id %d is not found\n", orderId)
+		return fmt.Errorf("error deleting order: row with id %d is not found", orderId)
 	}
 
 	return nil

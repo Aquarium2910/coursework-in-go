@@ -103,9 +103,19 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 				fmt.Fprintf(writer, "\nSuccessfully added new order!\n")
 			}
 		case "3":
-			updateOrderType(writer, reader, controller)
+			err = updateOrderTypeNew(writer, reader, controller)
+			if err != nil {
+				slog.Error("", "error", err)
+			} else {
+				fmt.Fprintf(writer, "\nOrder updated successfully\n")
+			}
 		case "4":
-			deleteOrder(writer, reader, controller)
+			err = deleteOrder(writer, reader, controller)
+			if err != nil {
+				slog.Error("", "error", err)
+			} else {
+				fmt.Fprintf(writer, "Order deleted successfully\n")
+			}
 		case "5":
 			ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
 		case "6":
@@ -188,25 +198,51 @@ func formNewOrderNew(writer io.Writer, reader io.Reader, controller *postgres.Db
 	return nil
 }
 
-func updateOrderType(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
+func updateOrderTypeNew(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
 	var orderTypeNew string
 	var orderId int
 
 	input, err := frontend.TakeInput(writer, reader, "Enter order id: ")
 	if err != nil {
-		fmt.Fprintln(writer, err)
+		return fmt.Errorf("error updating order's type: %w", err)
 	}
-	orderId, _ = strconv.Atoi(input)
+	orderId, err = strconv.Atoi(input)
+	if err != nil {
+		return fmt.Errorf("error updating order's type: %w", err)
+	}
 
 	input, err = frontend.TakeInput(writer, reader, "Enter new order type: ")
-
-	err = controller.UpdateOrder(orderId, orderTypeNew)
 	if err != nil {
-		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
-		return
+		return fmt.Errorf("error updating order's type: %w", err)
 	}
 
-	fmt.Fprintf(writer, "Order updated successfully\n\n")
+	err = controller.UpdateOrderNew(orderId, orderTypeNew)
+	if err != nil {
+		return fmt.Errorf("error updating order's type: %w", err)
+	}
+
+	return nil
+}
+
+func deleteOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
+	var orderId int
+
+	inputId, err := frontend.TakeInput(writer, reader, "Enter order id: ")
+	if err != nil {
+		return fmt.Errorf("error deleting order: %w", err)
+	}
+
+	orderId, err = strconv.Atoi(inputId)
+	if err != nil {
+		return fmt.Errorf("error deleting order: %w", err)
+	}
+
+	err = controller.DeleteOrderNew(orderId)
+	if err != nil {
+		return fmt.Errorf("error deleting order: %w", err)
+	}
+
+	return nil
 }
 
 func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbController, limit int) {
@@ -229,23 +265,6 @@ func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbControl
 	if err := rows.Err(); err != nil {
 		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
 	}
-}
-
-func deleteOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
-	var orderId int
-	fmt.Fprintf(writer, "\nEnter order id: ")
-
-	_, err := fmt.Fscan(reader, &orderId)
-	if err != nil {
-		fmt.Fprintf(writer, "Couldn't delete order: %v\n", err)
-	}
-
-	err = controller.DeleteOrder(orderId)
-	if err != nil {
-		fmt.Fprintf(writer, "Couldn't delete order: %v\n", err)
-	}
-
-	fmt.Fprintf(writer, "Order deleted successfully\n\n")
 }
 
 func ShowTypesOfSmallestOrders(writer io.Writer, controller *postgres.DbController, limit int) {
