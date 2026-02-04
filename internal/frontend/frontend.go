@@ -45,3 +45,15 @@ func PrintTable(writer io.Writer, orders []models.Orders) {
 			order.Currency, order.ExchangeRate)
 	}
 }
+
+func TakeInput(writer io.Writer, reader io.Reader, instruction string) (string, error) {
+	var value string
+
+	fmt.Fprintf(writer, instruction)
+	_, err := fmt.Fscan(reader, &value)
+	if err != nil {
+		return "", fmt.Errorf("failed to scan value: %w", err)
+	}
+
+	return value, nil
+}

@@ -17,10 +17,6 @@ type DbController struct {
 }
 
 const (
-	selectAllOrders          = "SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate FROM orders"
-	selectAllOrdersWithLimit = `SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
-		 FROM orders
-		 LIMIT $1`
 	selectDatesWithBiggestOrders = `
 		SELECT orderdate, SUM(amount*exchangerate) as total_uah FROM orders
 		GROUP BY orderdate
@@ -63,30 +59,6 @@ FROM orders) AS  avg_less_then`
 		1
 	ORDER BY time_period`
 
-	mostSales = `
-		WITH stats AS (
-				SELECT
-						CASE
-							WHEN ordertime >= '00:00:00' AND ordertime < '08:00:00' THEN '00:00 - 08:00'
-							WHEN ordertime >= '08:00:00' AND ordertime < '16:00:00' THEN '08:00 - 16:00'
-							ELSE '16:00 - 23:59'
-						END AS time_period,
-					
-						COUNT(*) AS total_sales,
-					
-						COUNT(*) FILTER (WHERE(amount*exchangerate) > 1000) AS big_sales,
-					
-						COUNT(*) FILTER (WHERE(amount*exchangerate) <= 1000) AS small_sales
-					FROM orders
-					GROUP BY 1)
-		SELECT time_period, total_sales
-		FROM stats
-		ORDER BY total_sales DESC
-		LIMIT 1`
-
-	addNewOrder = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
-		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
-
 	updateOrder = `UPDATE orders 
 					SET ordertype = $1
 					WHERE id = $2`
@@ -110,13 +82,20 @@ func (c *DbController) Close() {
 }
 
 func (c *DbController) SelectAllOrdersNew(limit int) ([]models.Orders, error) {
+	const (
+		query          = "SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate FROM orders"
+		queryWithLimit = `SELECT id, (orderdate + ordertime) as orderTimeStamp, ordertype, amount, currency, exchangerate 
+		 FROM orders
+		 LIMIT $1`
+	)
+
 	var rows pgx.Rows
 	var err error
 
 	if limit == 0 {
-		rows, err = c.dbPool.Query(c.ctx, selectAllOrders)
+		rows, err = c.dbPool.Query(c.ctx, query)
 	} else {
-		rows, err = c.dbPool.Query(c.ctx, selectAllOrdersWithLimit, limit)
+		rows, err = c.dbPool.Query(c.ctx, queryWithLimit, limit)
 	}
 
 	if err != nil {
@@ -142,20 +121,21 @@ func (c *DbController) SelectAllOrdersNew(limit int) ([]models.Orders, error) {
 	return orders, nil
 }
 
-func (c *DbController) AddNewOrder(orderDate time.Time, orderType string, amount float64, currency string, exchangerate float64) bool {
-	tag, err := c.dbPool.Exec(c.ctx, addNewOrder, orderDate, orderType, amount, currency, exchangerate)
+func (c *DbController) AddNewOrderNew(orderDate time.Time, orderType string, amount float64, currency string, exchangerate float64) error {
+	const query = `INSERT INTO orders (orderDate, orderTime, orderType, amount, currency, exchangerate)
+		 VALUES (($1::timestamp)::date, ($1::timestamp)::time, $2, $3, $4, $5)`
+
+	tag, err := c.dbPool.Exec(c.ctx, query, orderDate, orderType, amount, currency, exchangerate)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error adding new order: %v\n", err)
-		return false
+		return fmt.Errorf("error adding new order: %w", err)
 	}
 
 	if tag.RowsAffected() == 0 {
-		fmt.Fprintf(os.Stderr, "Error adding new order: no rows inserted\n")
-		return false
+		return fmt.Errorf("error adding new order: no rows inserted")
 	}
 
-	return true
+	return nil
 }
 
 func (c *DbController) UpdateOrder(orderId int, orderType string) error {

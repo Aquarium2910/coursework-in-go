@@ -7,7 +7,10 @@ import (
 	"coursework/internal/postgres"
 	"fmt"
 	"io"
+	"log"
+	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -18,24 +21,52 @@ const (
 	typesOfSmallestOrdersLimit = 6
 
 	typeOfOrdersLessThan = "харчування"
-	lessThanЕhreshold    = 50
+	lessThanThreshold    = 50
 )
 
 func main() {
+	cleanup, err := StartupLogger()
+	if err != nil {
+		panic(err)
+	}
+	defer cleanup()
+
+	slog.Info("Logger initialized")
+
 	_ = godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
+
+	slog.Info("Loaded environment variables")
 
 	controller := postgres.NewDbController(dbURL)
 	defer controller.Close()
 
-	fmt.Println("✅ Додаток підключено до БД")
+	slog.Info("✅ Connected to DB")
 
-	err := menu(os.Stdout, os.Stdin, controller)
+	err = menu(os.Stdout, os.Stdin, controller)
 
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(0)
+		log.Fatal(err)
 	}
+}
+
+func StartupLogger() (func(), error) {
+	logFile, err := os.OpenFile("app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't create/open log file: %w", err)
+	}
+
+	cleanUp := func() {
+		err = logFile.Close()
+		if err != nil {
+			return
+		}
+	}
+
+	logger := slog.New(slog.NewTextHandler(logFile, nil))
+	slog.SetDefault(logger)
+
+	return cleanUp, nil
 }
 
 func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
@@ -54,12 +85,22 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 			fmt.Fprintf(writer, frontend.PrintLimit+"\n")
 			fmt.Fscan(reader, &limit)
 
-			printDbNew(writer, controller, limit)
+			err = printDbNew(writer, controller, limit)
+			if err != nil {
+				slog.Error("couldn't print db",
+					"error", err,
+					"operation", "printDbNew",
+					"limit", limit)
+				return err
+			}
 
 		case "2":
-			isOk := formNewOrder(writer, reader, controller)
-			if !isOk {
-				fmt.Fprintf(writer, "Some error happened while forming order\n")
+			err = formNewOrderNew(writer, reader, controller)
+			if err != nil {
+				slog.Error("error forming new order", "error", err)
+				fmt.Fprintln(writer, "Something went wrong, try again.")
+			} else {
+				fmt.Fprintf(writer, "\nSuccessfully added new order!\n")
 			}
 		case "3":
 			updateOrderType(writer, reader, controller)
@@ -70,7 +111,7 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 		case "6":
 			ShowOrdersWhenRateChanged(writer, controller)
 		case "7":
-			ShowAvgNumOfOrdersLessThen(writer, controller, typeOfOrdersLessThan, lessThanЕhreshold)
+			ShowAvgNumOfOrdersLessThen(writer, controller, typeOfOrdersLessThan, lessThanThreshold)
 		case "8":
 			ShowTypesOfSmallestOrders(writer, controller, typesOfSmallestOrdersLimit)
 		case "9":
@@ -84,67 +125,88 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 	}
 }
 
-func printDbNew(writer io.Writer, controller *postgres.DbController, limit int) {
+func printDbNew(writer io.Writer, controller *postgres.DbController, limit int) error {
 	orders, err := controller.SelectAllOrdersNew(limit)
 	if err != nil {
-		fmt.Fprintln(writer, err)
+		return fmt.Errorf("couldn`t print db: %w", err)
 	}
 
 	frontend.PrintTable(writer, orders)
+	return nil
 }
 
-func formNewOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) bool {
-	var order models.Order
+func formNewOrderNew(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
+	var order models.Orders
+	var OrderTimeStampInput string
 
 	scanner := bufio.NewScanner(reader)
 	fmt.Fprintf(writer, "Write the date and time of order in following format: (%s)\n", frontend.TimeFormat)
 	fmt.Fprintf(writer, "Order date: ")
 	if scanner.Scan() {
-		order.OrderTimeStampInput = scanner.Text()
+		OrderTimeStampInput = scanner.Text()
 	}
 	var err = scanner.Err()
 	if err != nil {
-		return false
+		return fmt.Errorf("couldn't form new order: %w", err)
 	}
 
-	order.OrderTimeStamp, err = time.Parse(frontend.TimeFormat, order.OrderTimeStampInput)
+	order.TimeStamp, err = time.Parse(frontend.TimeFormat, OrderTimeStampInput)
 	if err != nil {
-		return false
+		return fmt.Errorf("couldn't form new order: %w", err)
 	}
 
 	fmt.Fprintf(writer, "Order type: ")
-	_, err = fmt.Fscan(reader, &order.OrderType)
+	_, err = fmt.Fscan(reader, &order.Type)
 	if err != nil {
-		return false
+		return fmt.Errorf("couldn't form new order: %w", err)
 	}
 
 	fmt.Fprintf(writer, "Pay amount: ")
 	_, err = fmt.Fscan(reader, &order.Amount)
 	if err != nil {
-		return false
+		return fmt.Errorf("couldn't form new order: %w", err)
 	}
 
 	fmt.Fprintf(writer, "Currency: ")
 	_, err = fmt.Fscan(reader, &order.Currency)
 	if err != nil {
-		return false
+		return fmt.Errorf("couldn't form new order: %w", err)
 	}
 
 	fmt.Fprintf(writer, "Exchange rate: ")
 	_, err = fmt.Fscan(reader, &order.ExchangeRate)
 	if err != nil {
-		return false
+		return fmt.Errorf("couldn't form new order: %w", err)
 	}
 
-	isAdded := controller.AddNewOrder(order.OrderTimeStamp, order.OrderType, order.Amount, order.Currency, order.ExchangeRate)
+	err = controller.AddNewOrderNew(order.TimeStamp, order.Type, order.Amount, order.Currency, order.ExchangeRate)
 
-	if isAdded {
-		fmt.Fprintf(writer, "✅Added new order succesfully\n")
-		return true
+	if err != nil {
+		return fmt.Errorf("failed to add new order: %w", err)
 	}
 
-	fmt.Fprintf(writer, "❌Failed to add new order\n")
-	return false
+	return nil
+}
+
+func updateOrderType(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
+	var orderTypeNew string
+	var orderId int
+
+	input, err := frontend.TakeInput(writer, reader, "Enter order id: ")
+	if err != nil {
+		fmt.Fprintln(writer, err)
+	}
+	orderId, _ = strconv.Atoi(input)
+
+	input, err = frontend.TakeInput(writer, reader, "Enter new order type: ")
+
+	err = controller.UpdateOrder(orderId, orderTypeNew)
+	if err != nil {
+		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
+		return
+	}
+
+	fmt.Fprintf(writer, "Order updated successfully\n\n")
 }
 
 func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbController, limit int) {
@@ -167,34 +229,6 @@ func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbControl
 	if err := rows.Err(); err != nil {
 		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
 	}
-}
-
-func updateOrderType(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
-	var orderTypeNew string
-	var orderId int
-
-	fmt.Fprintf(writer, "Enter order id: ")
-	_, err := fmt.Fscan(reader, &orderId)
-	if err != nil {
-		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
-		return
-	}
-
-	fmt.Fprintf(writer, "Enter new order type: ")
-
-	_, err = fmt.Fscan(reader, &orderTypeNew)
-	if err != nil {
-		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
-		return
-	}
-
-	err = controller.UpdateOrder(orderId, orderTypeNew)
-	if err != nil {
-		fmt.Fprintf(writer, "Couldn't update order: %v\n", err)
-		return
-	}
-
-	fmt.Fprintf(writer, "Order updated successfully\n\n")
 }
 
 func deleteOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) {
