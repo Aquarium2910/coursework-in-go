@@ -117,7 +117,10 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 				fmt.Fprintf(writer, "Order deleted successfully\n")
 			}
 		case "5":
-			ShowDatesWithBiggestOrders(writer, controller, biggestOrdersLimit)
+			err = ShowDatesWithBiggestOrdersNew(writer, controller, biggestOrdersLimit)
+			if err != nil {
+				slog.Error("", "error", err)
+			}
 		case "6":
 			ShowOrdersWhenRateChanged(writer, controller)
 		case "7":
@@ -245,26 +248,15 @@ func deleteOrderNew(writer io.Writer, reader io.Reader, controller *postgres.DbC
 	return nil
 }
 
-func ShowDatesWithBiggestOrders(writer io.Writer, controller *postgres.DbController, limit int) {
-	rows, err := controller.DatesWithBiggestOrders(limit)
+func ShowDatesWithBiggestOrdersNew(writer io.Writer, controller *postgres.DbController, limit int) error {
+	orders, err := controller.DatesWithBiggestOrdersNew(limit)
 	if err != nil {
-		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
+		return fmt.Errorf("couldn't show biggest orders: %w", err)
 	}
 
-	defer rows.Close()
+	frontend.PrintBiggestOrders(writer, orders)
 
-	var order models.Order
-
-	fmt.Fprintf(writer, "Order dates		Total in UAH\n")
-	for rows.Next() {
-		err = rows.Scan(&order.OrderTimeStamp, &order.TotalUah)
-		fmt.Fprintf(writer, "%s\t\t%f\n", order.OrderTimeStamp.Format(time.DateOnly), order.TotalUah)
-	}
-	fmt.Fprintf(writer, "\n")
-
-	if err := rows.Err(); err != nil {
-		fmt.Fprintf(writer, "Couldn't show biggest orders: %v\n", err)
-	}
+	return nil
 }
 
 func ShowTypesOfSmallestOrders(writer io.Writer, controller *postgres.DbController, limit int) {

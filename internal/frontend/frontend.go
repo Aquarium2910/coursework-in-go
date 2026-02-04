@@ -46,6 +46,13 @@ func PrintTable(writer io.Writer, orders []models.Orders) {
 	}
 }
 
+func PrintBiggestOrders(writer io.Writer, orders []models.BiggestOrders) {
+	fmt.Fprintf(writer, "\n\tDate\t\tAmount\n")
+	for _, order := range orders {
+		fmt.Fprintf(writer, "%s   %f\n", order.Date.Format("2006-01-02"), order.TotalUah)
+	}
+}
+
 func TakeInput(writer io.Writer, reader io.Reader, instruction string) (string, error) {
 	var value string
 

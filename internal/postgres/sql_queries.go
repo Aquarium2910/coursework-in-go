@@ -164,12 +164,36 @@ func (c *DbController) DeleteOrderNew(orderId int) error {
 	return nil
 }
 
-func (c *DbController) DatesWithBiggestOrders(limit int) (pgx.Rows, error) {
+func (c *DbController) DatesWithBiggestOrdersNew(limit int) ([]models.BiggestOrders, error) {
+	const query = `
+		SELECT orderdate, SUM(amount*exchangerate) as total_uah FROM orders
+		GROUP BY orderdate
+		ORDER BY total_uah DESC 
+		LIMIT $1`
+
 	if limit == 0 {
 		return nil, nil
 	}
 
-	return c.dbPool.Query(c.ctx, selectDatesWithBiggestOrders, limit)
+	rows, err := c.dbPool.Query(c.ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error getting dates with biggest orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []models.BiggestOrders
+	for i := 0; rows.Next(); i++ {
+		orders = append(orders, models.BiggestOrders{})
+		err = rows.Scan(&orders[i].Date, &orders[i].TotalUah)
+		if err != nil {
+			return nil, fmt.Errorf("error getting dates with biggest orders: %w", err)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error getting dates with biggest orders: %w", err)
+	}
+	return orders, nil
 }
 
 func (c *DbController) TypeOfSmallestOrders(limit int) (pgx.Rows, error) {

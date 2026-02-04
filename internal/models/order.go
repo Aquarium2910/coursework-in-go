@@ -20,3 +20,8 @@ type Orders struct {
 	Currency     string
 	ExchangeRate float64
 }
+
+type BiggestOrders struct {
+	Date     time.Time
+	TotalUah float64
+}
