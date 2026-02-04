@@ -110,7 +110,7 @@ func menu(writer io.Writer, reader io.Reader, controller *postgres.DbController)
 				fmt.Fprintf(writer, "\nOrder updated successfully\n")
 			}
 		case "4":
-			err = deleteOrder(writer, reader, controller)
+			err = deleteOrderNew(writer, reader, controller)
 			if err != nil {
 				slog.Error("", "error", err)
 			} else {
@@ -224,7 +224,7 @@ func updateOrderTypeNew(writer io.Writer, reader io.Reader, controller *postgres
 	return nil
 }
 
-func deleteOrder(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
+func deleteOrderNew(writer io.Writer, reader io.Reader, controller *postgres.DbController) error {
 	var orderId int
 
 	inputId, err := frontend.TakeInput(writer, reader, "Enter order id: ")

@@ -58,12 +58,6 @@ FROM orders) AS  avg_less_then`
 	GROUP BY
 		1
 	ORDER BY time_period`
-
-	updateOrder = `UPDATE orders 
-					SET ordertype = $1
-					WHERE id = $2`
-
-	deleteOrder = `DELETE FROM orders WHERE id = $1`
 )
 
 func NewDbController(dbURL string) *DbController {
@@ -139,7 +133,11 @@ func (c *DbController) AddNewOrderNew(orderDate time.Time, orderType string, amo
 }
 
 func (c *DbController) UpdateOrderNew(orderId int, orderType string) error {
-	report, err := c.dbPool.Exec(c.ctx, updateOrder, orderType, orderId)
+	const query = `UPDATE orders 
+					SET ordertype = $1
+					WHERE id = $2`
+
+	report, err := c.dbPool.Exec(c.ctx, query, orderType, orderId)
 	if err != nil {
 		return fmt.Errorf("error updating order: %w", err)
 	}
@@ -152,7 +150,9 @@ func (c *DbController) UpdateOrderNew(orderId int, orderType string) error {
 }
 
 func (c *DbController) DeleteOrderNew(orderId int) error {
-	report, err := c.dbPool.Exec(c.ctx, deleteOrder, orderId)
+	const query = `DELETE FROM orders WHERE id = $1`
+
+	report, err := c.dbPool.Exec(c.ctx, query, orderId)
 	if err != nil {
 		return fmt.Errorf("error deleting order: %w", err)
 	}
